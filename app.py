@@ -9,7 +9,7 @@ import io
 st.set_page_config(page_title="YouTube Language Learner Pro", layout="wide")
 
 st.title("🎥 YouTube Subtitle & Vocabulary Learner Pro")
-st.write("Pega el enlace de **cualquier video de YouTube** para extraer y traducir su transcripción automáticamente.")
+st.write("Pega el enlace de un video de YouTube para extraer y traducir su transcripción automáticamente.")
 
 if 'vocab_list' not in st.session_state:
     st.session_state.vocab_list = []
@@ -64,99 +64,83 @@ if youtube_url:
         st.subheader("📜 Transcripción y Traducción")
         
         try:
-            # Buscar cualquier transcripción disponible (manual o automática)
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            # Método directo y compatible con todas las versiones
+            try:
+                transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['en', 'en-US', 'es'])
+            except Exception:
+                # Si falla con idiomas específicos, intenta obtener cualquiera disponible por defecto
+                transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
+                
+            translator = GoogleTranslator(source='auto', target='es')
             
-            chosen_transcript = None
-            # Intentar priorizar inglés o español, si existen
-            for t in transcript_list:
-                if t.language_code in ['en', 'en-US', 'es']:
-                    chosen_transcript = t
-                    break
-            # Si no hay en inglés/español, tomar el primero que encuentre disponible
-            if not chosen_transcript:
-                for t in transcript_list:
-                    chosen_transcript = t
-                    break
+            col_transcript, col_dictionary = st.columns([2, 1])
             
-            if chosen_transcript:
-                # Obtener el texto original
-                original_transcript = chosen_transcript.fetch()
-                
-                # Traducir al español de manera nativa o usando deep-translator
-                translator = GoogleTranslator(source='auto', target='es')
-                
-                col_transcript, col_dictionary = st.columns([2, 1])
-                
-                with col_transcript:
-                    # Mostrar las primeras 40 líneas para agilizar la prueba
-                    for entry in original_transcript[:40]:
-                        original_text = entry['text']
-                        
-                        # Traducir línea por línea de manera segura
-                        try:
-                            translated_text = translator.translate(original_text)
-                        except Exception:
-                            translated_text = "Traducción no disponible"
-                        
-                        st.markdown("---")
-                        st.markdown(f"**Original:** {original_text}")
-                        st.markdown(f"**Traducción (ES):** *{translated_text}*")
-                
-                with col_dictionary:
-                    st.sidebar.header("🔍 Diccionario Interactivo")
-                    selected_word = st.sidebar.text_input("Escribe una palabra para analizar:")
+            with col_transcript:
+                # Mostrar las primeras 40 líneas
+                for entry in transcript_list[:40]:
+                    original_text = entry['text']
                     
-                    if selected_word:
-                        info = get_word_info(selected_word)
-                        st.sidebar.subheader(f"📌 {info['word'].capitalize()}")
-                        st.sidebar.write("**Pronunciación nativa:**")
-                        play_audio(info['word'])
-                        
-                        st.sidebar.write(f"**Traducción:** {info['translation']}")
-                        st.sidebar.write(f"**Fonética:** `{info['phonetic']}`")
-                        
-                        st.sidebar.write("**Ejemplos de uso:**")
-                        for ex in info['examples']:
-                            st.sidebar.write(f"- *{ex}*")
-                        
-                        if st.sidebar.button("➕ Guardar palabra para Anki"):
-                            card_data = {
-                                "word": info['word'],
-                                "translation": info['translation'],
-                                "phonetic": info['phonetic'],
-                                "example": info['examples'][0] if info['examples'] else ""
-                            }
-                            if card_data not in st.session_state.vocab_list:
-                                st.session_state.vocab_list.append(card_data)
-                                st.sidebar.success(f"¡'{info['word']}' guardada!")
-                            else:
-                                st.sidebar.warning("Esta palabra ya está en tu lista.")
+                    try:
+                        translated_text = translator.translate(original_text)
+                    except Exception:
+                        translated_text = "Traducción no disponible"
+                    
+                    st.markdown("---")
+                    st.markdown(f"**Original:** {original_text}")
+                    st.markdown(f"**Traducción (ES):** *{translated_text}*")
+            
+            with col_dictionary:
+                st.sidebar.header("🔍 Diccionario Interactivo")
+                selected_word = st.sidebar.text_input("Escribe una palabra para analizar:")
+                
+                if selected_word:
+                    info = get_word_info(selected_word)
+                    st.sidebar.subheader(f"📌 {info['word'].capitalize()}")
+                    st.sidebar.write("**Pronunciación nativa:**")
+                    play_audio(info['word'])
+                    
+                    st.sidebar.write(f"**Traducción:** {info['translation']}")
+                    st.sidebar.write(f"**Fonética:** `{info['phonetic']}`")
+                    
+                    st.sidebar.write("**Ejemplos de uso:**")
+                    for ex in info['examples']:
+                        st.sidebar.write(f"- *{ex}*")
+                    
+                    if st.sidebar.button("➕ Guardar palabra para Anki"):
+                        card_data = {
+                            "word": info['word'],
+                            "translation": info['translation'],
+                            "phonetic": info['phonetic'],
+                            "example": info['examples'][0] if info['examples'] else ""
+                        }
+                        if card_data not in st.session_state.vocab_list:
+                            st.session_state.vocab_list.append(card_data)
+                            st.sidebar.success(f"¡'{info['word']}' guardada!")
+                        else:
+                            st.sidebar.warning("Esta palabra ya está en tu lista.")
 
-                    st.sidebar.markdown("---")
-                    st.sidebar.header("📦 Exportar a Anki")
-                    if st.session_state.vocab_list:
-                        st.sidebar.write(f"Palabras guardadas: **{len(st.session_state.vocab_list)}**")
-                        anki_export_text = ""
-                        for item in st.session_state.vocab_list:
-                            anki_export_text += f"{item['word']}\t{item['translation']}\t{item['phonetic']} | Ejemplo: {item['example']}\n"
-                        
-                        st.sidebar.download_button(
-                            label="📥 Descargar archivo para Anki (.txt)",
-                            data=anki_export_text,
-                            file_name="vocabulario_youtube_anki.txt",
-                            mime="text/plain"
-                        )
-                        if st.sidebar.button("🗑️ Limpiar lista"):
-                            st.session_state.vocab_list = []
-                            st.rerun()
-                    else:
-                        st.sidebar.info("Guarda palabras desde el diccionario para poder exportarlas aquí.")
-            else:
-                st.error("No se encontró ningún subtítulo disponible para este video.")
+                st.sidebar.markdown("---")
+                st.sidebar.header("📦 Exportar a Anki")
+                if st.session_state.vocab_list:
+                    st.sidebar.write(f"Palabras guardadas: **{len(st.session_state.vocab_list)}**")
+                    anki_export_text = ""
+                    for item in st.session_state.vocab_list:
+                        anki_export_text += f"{item['word']}\t{item['translation']}\t{item['phonetic']} | Ejemplo: {item['example']}\n"
+                    
+                    st.sidebar.download_button(
+                        label="📥 Descargar archivo para Anki (.txt)",
+                        data=anki_export_text,
+                        file_name="vocabulario_youtube_anki.txt",
+                        mime="text/plain"
+                    )
+                    if st.sidebar.button("🗑️ Limpiar lista"):
+                        st.session_state.vocab_list = []
+                        st.rerun()
+                else:
+                    st.sidebar.info("Guarda palabras desde el diccionario para poder exportarlas aquí.")
                         
         except (TranscriptsDisabled, NoTranscriptFound):
-            st.error("Este video tiene los subtítulos completamente desactivados o bloqueados por el creador.")
+            st.error("Este video tiene los subtítulos completamente desactivados o no disponibles.")
         except Exception as e:
             st.error(f"Ocurrió un error al procesar el video: {e}")
     else:
