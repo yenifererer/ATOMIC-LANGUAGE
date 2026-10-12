@@ -1,5 +1,5 @@
 import streamlit as st
-from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
+from youtube_transcript_api import YouTubeTranscriptApi
 from deep_translator import GoogleTranslator
 import requests
 import re
@@ -64,12 +64,9 @@ if youtube_url:
         st.subheader("📜 Transcripción y Traducción")
         
         try:
-            # Método directo y compatible con todas las versiones
-            try:
-                transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['en', 'en-US', 'es'])
-            except Exception:
-                # Si falla con idiomas específicos, intenta obtener cualquiera disponible por defecto
-                transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
+            # Uso de la API actualizada de YouTubeTranscriptApi
+            ytt_api = YouTubeTranscriptApi()
+            transcript_list = ytt_api.fetch(video_id, languages=['en', 'en-US', 'es'])
                 
             translator = GoogleTranslator(source='auto', target='es')
             
@@ -78,7 +75,8 @@ if youtube_url:
             with col_transcript:
                 # Mostrar las primeras 40 líneas
                 for entry in transcript_list[:40]:
-                    original_text = entry['text']
+                    # En la versión nueva, cada entrada es un objeto o diccionario con 'text'
+                    original_text = entry.get('text', '') if isinstance(entry, dict) else entry['text']
                     
                     try:
                         translated_text = translator.translate(original_text)
@@ -139,9 +137,7 @@ if youtube_url:
                 else:
                     st.sidebar.info("Guarda palabras desde el diccionario para poder exportarlas aquí.")
                         
-        except (TranscriptsDisabled, NoTranscriptFound):
-            st.error("Este video tiene los subtítulos completamente desactivados o no disponibles.")
         except Exception as e:
-            st.error(f"Ocurrió un error al procesar el video: {e}")
+            st.error(f"No se pudieron cargar los subtítulos de este video: {e}")
     else:
         st.warning("Por favor introduce una URL válida de YouTube.")
